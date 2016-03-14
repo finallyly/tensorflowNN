@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
 def weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev=1.0 / np.sqrt(shape[0]))
+    initial = tf.truncated_normal(shape, stddev=1.0 / np.sqrt(shape[0]), seed=0)
     return tf.Variable(initial)
 
 def bias_variable(shape):
@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     W_softmax = weight_variable([SIZE_HIDDEN_LAYER1, NUM_CLASSES])
     b_softmax = bias_variable([NUM_CLASSES])
-    y = tf.nn.softmax(tf.matmul(h1, W_softmax) + b_softmax)
+    y = tf.nn.softmax(tf.matmul(h1_dropout, W_softmax) + b_softmax)
 
     cross_entropy = -tf.reduce_sum(y_ * tf.log(y))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
@@ -46,8 +46,8 @@ if __name__ == '__main__':
             batch = mnist.train.next_batch(BATCH_SIZE)
             train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: KEEP_PROB})
             if i%(NUM_EPOCHS/50) == 0:
-                validation_accuracy = accuracy.eval(feed_dict={x: mnist.validation.images, y_: mnist.validation.labels})
+                validation_accuracy = accuracy.eval(feed_dict={x: mnist.validation.images, y_: mnist.validation.labels, keep_prob: 1.0})
                 print 'step {i}, validation accuracy is {a:.2f}%'.format(i=i, a=100.0*validation_accuracy)
-        test_accuracy = accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels})
+        test_accuracy = accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
         print 'test accuracy is {a:.2f}%'.format(a=100.0*test_accuracy)
     sess.close()
