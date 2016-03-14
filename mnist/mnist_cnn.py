@@ -3,6 +3,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
+BATCH_SIZE = 50
+NUM_EPOCHS = 10000
+
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1)
     return tf.Variable(initial)
@@ -55,8 +58,8 @@ if __name__ == '__main__':
     sess = tf.Session()
     with sess.as_default():
         tf.initialize_all_variables().run()
-        for i in range(10000):
-            batch = mnist.train.next_batch(50)
+        for i in range(NUM_EPOCHS):
+            batch = mnist.train.next_batch(BATCH_SIZE)
             if i%500 == 0:
                 valid_accuracy = accuracy.eval(feed_dict={x: mnist.validation.images, y_: mnist.validation.labels, keep_prob: 1.0})
                 print("step %d, validation accuracy %g"%(i, valid_accuracy))
