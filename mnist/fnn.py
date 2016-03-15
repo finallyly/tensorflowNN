@@ -34,7 +34,7 @@ class FCNN(object):
         correct_predictions = tf.equal(tf.argmax(self.y, 1), tf.argmax(self.y_, 1))
         self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, tf.float32))
         self.sess = tf.Session()
-    def fit(self, x, y, learning_rate=0.0001, batch_size=50, num_epochs=1000, keep_prob=0.5):
+    def fit(self, x, y, learning_rate=0.0001, batch_size=50, num_epochs=1000, keep_prob=0.5, verbose=True):
         num_sample = x.shape[0]
         train_step = tf.train.AdamOptimizer(learning_rate).minimize(self.cross_entropy)
         with self.sess.as_default():
@@ -50,9 +50,10 @@ class FCNN(object):
                 batch_x = x[selected]
                 batch_y = y[selected]
                 assert batch_x.shape[0] == batch_size
-                if i%100 == 0:
-                    accuracy = self.accuracy.eval(feed_dict={self.x: batch_x, self.y_: batch_y, self.keep_prob: 1.0})
-                    print 'step {s}, accuracy on the training batch is {a:.2f}%'.format(s=i, a=accuracy*100.0)
+                if verbose:
+                    if i%100 == 0:
+                        accuracy = self.accuracy.eval(feed_dict={self.x: batch_x, self.y_: batch_y, self.keep_prob: 1.0})
+                        print 'step {s}, accuracy on the training batch is {a:.2f}%'.format(s=i, a=accuracy*100.0)
                 train_step.run(feed_dict={self.x: batch_x, self.y_: batch_y, self.keep_prob: keep_prob})
     def transform(self, x):
         with self.sess.as_default():
