@@ -21,6 +21,7 @@ class GraphWrapper(object):
 
 class SoftmaxRegressor(object):
     def __init__(self):
+        # 模型的参数,对应于Graph中的trainable variables
         self.params = {}
         # Graph and session for online running
         self.updated = False
@@ -54,7 +55,6 @@ class SoftmaxRegressor(object):
 
     def fit(self, x, y, learning_rate, batch_size, num_epochs, verbose=True):
         """
-
         :param x: np.ndarray, each row stores an instance
         :param y: one-dimensional np.ndarray, 0 .. num_classes-1
         :param learning_rate:
@@ -91,6 +91,10 @@ class SoftmaxRegressor(object):
         self.updated = True         
                 
     def predict_proba(self, x):
+        """
+        :param x:
+        :return: np.2darray, each row gives the proba of an instance belonging to each class
+        """
         if len(self.params) < 1:
             raise Exception("empty model")
         if self.updated:
@@ -103,6 +107,10 @@ class SoftmaxRegressor(object):
         return proba
 
     def predict(self, x):
+        """
+        :param x:
+        :return: one-dimensional np.ndarray, ordinal label
+        """
         proba = self.predict_proba(x)
         return np.argmax(proba, 1)
 
@@ -136,12 +144,11 @@ if __name__ == '__main__':
                       num_epochs=10000)
     accuracy = np.mean(softmax_regressor.predict(mnist.test.images) == mnist.test.labels)
     print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
-
     softmax_regressor.save("model")
 
-    softmax_regressor.load("model")
-    
-    accuracy = np.mean(softmax_regressor.predict(mnist.test.images) == mnist.test.labels)
+    softmax_regressor2 = SoftmaxRegressor()
+    softmax_regressor2.load("model")
+    accuracy = np.mean(softmax_regressor2.predict(mnist.test.images) == mnist.test.labels)
     print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
     
     
