@@ -29,7 +29,7 @@ class FCNN(object):
         # 模型的参数,对应于Graph中的trainable variables
         self.params = {}
         # Graph and session for online running
-        self.updated = False
+        self.updated = True
         self.G_run = None
         self.sess_run = None
 
@@ -125,6 +125,7 @@ class FCNN(object):
         if len(self.params) < 1:
             raise Exception("empty model")
         if self.updated:
+            print 'updating running Graph...'
             self.G_run = self.__build_graph__(var_val=self.params)
             if self.sess_run is not None: self.sess_run.close()
             self.sess_run = tf.Session(graph=self.G_run.graph)
@@ -175,4 +176,20 @@ if __name__ == '__main__':
     )
     accuracy = np.mean(fcnn.predict(mnist.test.images) == mnist.test.labels)
     print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
+    accuracy = np.mean(fcnn.predict(mnist.test.images) == mnist.test.labels)
+    print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
     fcnn.save("model")
+    
+    # test serialisation
+    with open("model_param", "wb") as f:
+        cPickle.dump(fcnn.params, f)
+    
+    with open("model_param", "rb") as f:
+        params = cPickle.load(f)
+    fcnn2 = FCNN()
+    fcnn2.params = params
+    accuracy = np.mean(fcnn2.predict(mnist.test.images) == mnist.test.labels)
+    print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
+    accuracy = np.mean(fcnn2.predict(mnist.test.images) == mnist.test.labels)
+    print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
+    
