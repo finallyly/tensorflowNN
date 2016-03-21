@@ -83,8 +83,13 @@ class FCNN(object):
         return GraphWrapper(graph, phr, var, tsr, ops)
 
     def fit(self, x, y, size_hidden_layer, batch_size=50, num_epochs=1e4, learning_rate=1e-3, keep_prob=0.5, verbose=True):
+        """
+        :param x: np.ndarray, each row stores an instance
+        :param y: one-dimensional np.ndarray, 0 .. num_classes-1
+        """
         num_samples = x.shape[0]
         input_dim = x.shape[1]
+        y = np.int32(y)
         num_classes = y.max() + 1
         y = self.__ordinal_to_onehot__(y)
         G = self.__build_graph__(input_dim, num_classes, size_hidden_layer)
