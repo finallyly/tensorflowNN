@@ -171,9 +171,3 @@ if __name__ == '__main__':
     accuracy = np.mean(fcnn.predict(mnist.test.images) == mnist.test.labels)
     print 'test accuracy is {a:.2f}%'.format(a=accuracy * 100.0)
     fcnn.save("model")
-
-
-
-
-
-
