@@ -29,6 +29,7 @@ if __name__ == '__main__':
     input_dim = train_images.shape[1]
     latent_dim = 10
     learning_rate = 1e-2
+    penalty_V = 1e-2
     batch_size = 50
     num_epochs = 200
     probe_step = 10
@@ -39,24 +40,24 @@ if __name__ == '__main__':
     y_ = tf.placeholder(tf.float32, (None,))
     w0 = tf.Variable(0.0)
     V = tf.Variable(tf.truncated_normal([input_dim, latent_dim], stddev=1.0/np.sqrt(input_dim), seed=0))
-    #V = tf.Variable(tf.zeros([input_dim, latent_dim]))
     VVT = tf.matmul(V, V, transpose_a=False, transpose_b=True)
     y = w0 + tf.matmul(XXT, tf.reshape(VVT, [-1, 1]))
     y = tf.reshape(y, [-1])
     nll = -tf.reduce_mean(tf.log(tf.nn.sigmoid(y * y_)))
-    train_step = tf.train.AdamOptimizer(learning_rate).minimize(nll)
+    reg_V = tf.reduce_sum(V * V)
+    loss = nll + penalty_V * reg_V
+    train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss)
     is_correct = tf.greater(y * y_, 0)
     accuracy = tf.reduce_mean(tf.cast(is_correct, tf.float32))
     
     # train model
     sess = tf.Session()
     sess.run(tf.initialize_all_variables())
+    print '|V|.sum is {s}'.format(s=np.abs(sess.run(V)).sum())
     num_samples = train_images.shape[0]
     head = 0
     indices = range(num_samples)
-    for i in range(num_epochs):
-        if i == 0:
-            print '|V|.sum is {s}'.format(s=np.abs(sess.run(V)).sum())
+    for i in range(num_epochs):            
         if head + batch_size > num_samples:
             indices = np.random.permutation(num_samples)
             head = 0
@@ -66,8 +67,10 @@ if __name__ == '__main__':
         batch_y = train_labels[selected]
         batch_xxt = calc_XXT(batch_x)
         if i%probe_step == 0:
-            accuracy_rate = sess.run(accuracy, feed_dict={X: batch_x, XXT: batch_xxt, y_: batch_y})
-            print 'step {i}, accuracy on the batch is {a:.2f}%, |V|.sum is {s}'.format(i=i, a=accuracy_rate*100.0, s=np.abs(sess.run(V)).sum())
+            nll_this_step = sess.run(nll, feed_dict={X: batch_x, XXT: batch_xxt, y_: batch_y})
+            reg_V_this_step = sess.run(reg_V)
+            accuracy_this_step = sess.run(accuracy, feed_dict={X: batch_x, XXT: batch_xxt, y_: batch_y})
+            print 'step {i}, accuracy {a:.2f}%, reg_V {s:.6f}, nll {n:.6f}'.format(i=i, a=accuracy_this_step*100.0, s=reg_V_this_step, n=nll_this_step)
         sess.run(train_step, feed_dict={X: batch_x, XXT: batch_xxt, y_: batch_y})
     # test model
     predictions = None
