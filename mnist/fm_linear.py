@@ -12,21 +12,21 @@ def calc_XXT(X):
 
 if __name__ == '__main__':
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
-    m = (mnist.train.labels == 0) | ((mnist.train.labels == 8))
+    m = (mnist.train.labels == 2) | ((mnist.train.labels == 5))
     train_images = mnist.train.images[m]
     train_labels = np.float32(mnist.train.labels[m])
-    train_labels[train_labels == 0] = -1
-    train_labels[train_labels == 8] = 1
+    train_labels[train_labels == 2] = -1
+    train_labels[train_labels == 5] = 1
 
-    m = (mnist.test.labels == 0) | ((mnist.test.labels == 8))
+    m = (mnist.test.labels == 2) | ((mnist.test.labels == 5))
     test_images = mnist.test.images[m]
     test_labels = np.float32(mnist.test.labels[m])
-    test_labels[test_labels == 0] = -1
-    test_labels[test_labels == 8] = 1
+    test_labels[test_labels == 2] = -1
+    test_labels[test_labels == 5] = 1
     
     input_dim = train_images.shape[1]
     latent_dim = 10
-    learning_rate = 1e-4
+    learning_rate = 1e-2
     batch_size = 50
     num_epochs = 1000
     
@@ -58,12 +58,12 @@ if __name__ == '__main__':
         batch_y = train_labels[selected]
         if i%100 == 0:
             accuracy_rate = sess.run(accuracy, feed_dict={X: batch_x, y_: batch_y})
-            print 'step {i}, accuracy on the batch is {a:.2f}'.format(i=i, a=accuracy_rate*100.0)
+            print 'step {i}, accuracy on the batch is {a:.2f}%'.format(i=i, a=accuracy_rate*100.0)
         sess.run(train_step, feed_dict={X: batch_x, y_: batch_y})
     w0_ = sess.run(w0)
     w_ = sess.run(w)
     # test model
     accuracy_rate = sess.run(accuracy, feed_dict={X: test_images, y_: test_labels})
-    print 'accuracy on test set is {a:.2f}'.format(a=accuracy_rate*100.0)
+    print 'accuracy on test set is {a:.2f}%'.format(a=accuracy_rate*100.0)
     #sess.close()
     

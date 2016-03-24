@@ -12,25 +12,25 @@ def calc_XXT(X):
 
 if __name__ == '__main__':
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
-    m = (mnist.train.labels == 0) | ((mnist.train.labels == 8))
+    m = (mnist.train.labels == 2) | ((mnist.train.labels == 5))
     train_images = mnist.train.images[m]
     train_labels = np.float32(mnist.train.labels[m])
-    train_labels[train_labels == 0] = -1
-    train_labels[train_labels == 8] = 1
+    train_labels[train_labels == 2] = -1
+    train_labels[train_labels == 5] = 1
     print 'training set: {p} positives, {n} negatives'.format(p=(train_labels==1).sum(), n=(train_labels==-1).sum())
     
-    m = (mnist.test.labels == 0) | ((mnist.test.labels == 8))
+    m = (mnist.test.labels == 2) | ((mnist.test.labels == 5))
     test_images = mnist.test.images[m]
     test_labels = np.float32(mnist.test.labels[m])
-    test_labels[test_labels == 0] = -1
-    test_labels[test_labels == 8] = 1
+    test_labels[test_labels == 2] = -1
+    test_labels[test_labels == 5] = 1
     print 'test set: {p} positives, {n} negatives'.format(p=(test_labels==1).sum(), n=(test_labels==-1).sum())
     
     input_dim = train_images.shape[1]
     latent_dim = 10
     learning_rate = 1e-2
     batch_size = 50
-    num_epochs = 1000
+    num_epochs = 200
     probe_step = 10
     
     # build graph
@@ -51,7 +51,6 @@ if __name__ == '__main__':
     # train model
     sess = tf.Session()
     sess.run(tf.initialize_all_variables())
-    print np.abs(sess.run(V)).sum()
     num_samples = train_images.shape[0]
     head = 0
     indices = range(num_samples)
