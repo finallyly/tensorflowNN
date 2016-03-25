@@ -125,9 +125,11 @@ class FactorMach(object):
         G = self.__build_graph__(input_dim, latent_dim)
         sess = tf.Session(graph=G.graph)
         validation_epochs = 30
-        loss_margin = 0.2
+        patience_epochs = 3 * validation_epochs
+        tolerance = 0.2
         best_loss = np.nan
         best_params = np.nan
+        patience = 0
         with sess.as_default():
             G.ops.init_vars.run()
             head = 0
@@ -150,19 +152,29 @@ class FactorMach(object):
                                                 G.phr.penalty_w: penalty_w, G.phr.penalty_V: penalty_V})
                 if (i + 1) % validation_epochs == 0:
                     loss = self.__calc_loss__(valid_x, valid_y, sess, G.tsr.nll, G)
-                    print 'epoch {i}, best loss {b:.4f}, loss {l:.4f}, learning_rate {r}'.format(i=i, b=best_loss, l=loss, r=learning_rate)
+                    print 'epoch {i}, best loss {b:.4f}, loss {l:.4f}, learning_rate {r}, tolerance {m:.4f}, patience {p}'.format(i=i, b=best_loss, l=loss, r=learning_rate, m=tolerance, p=patience)
+                    if best_loss is not np.nan:
+                        if np.abs(loss - best_loss) < 0.01 * best_loss:
+                            patience += validation_epochs
+                        else:
+                            patience = 0
+                        print '\tpatience {p}'.format(p=patience)
+                        if patience >= patience_epochs:
+                            print 'early stop'
+                            break
                     if best_loss is np.nan:
                         best_loss = loss
                         best_params = {}
                         for k, v in G.var.iteritems():
                             best_params[k] = G.var[k].eval()
                         print '\tinitialise best_loss and best_params'
-                    elif loss > best_loss * (1 + loss_margin):
+                    elif loss > best_loss * (1 + tolerance):
                         # roll back and decrease learning_rate
                         for k, v in best_params.iteritems():
                             sess.run(G.var[k].assign(best_params[k]))
-                        learning_rate /= 2.0
-                        print '\troll back, learning_rate {r}'.format(r=learning_rate)
+                        learning_rate *= 0.5
+                        tolerance *= 0.5
+                        print '\troll back, learning_rate {r}, tolerance {m:.4f}'.format(r=learning_rate, m=tolerance)
                     elif loss <= best_loss:
                         best_loss = loss
                         for k, v in G.var.iteritems():
@@ -252,8 +264,8 @@ if __name__ == '__main__':
 
     fm = FactorMach()
     fm.fit_ada(train_images, train_labels,
-           latent_dim=10, batch_size=50, num_epochs=200,
-           learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
+           latent_dim=10, batch_size=50, num_epochs=1000,
+           learning_rate=1e-2, penalty_w=1e-1, penalty_V=1e-2,
            verbose=True, probe_epochs=10)
     predictions = fm.predict(test_images)
     accuracy = np.mean(predictions * test_labels > 0)
