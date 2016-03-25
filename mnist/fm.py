@@ -103,7 +103,7 @@ class FactorMach(object):
                 if verbose:
                     if i % probe_epochs == 0:
                         accuracy = G.tsr.accuracy.eval(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y})
-                        print 'step {s}, training batch, accuracy {a:.2f}%'.format(s=i, a=accuracy * 100.0)
+                        print 'epoch {s}, training batch, accuracy {a:.2f}%'.format(s=i, a=accuracy * 100.0)
                 G.ops.train_step.run(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y,
                                                 G.phr.learning_rate: learning_rate,
                                                 G.phr.penalty_w: penalty_w, G.phr.penalty_V: penalty_V})
@@ -117,10 +117,62 @@ class FactorMach(object):
         indices = np.random.permutation(num_samples)
         valid_x = x[indices[0 : num_valid_samples]]
         valid_y = y[indices[0 : num_valid_samples]]
+
         x = x[indices[num_valid_samples: -1]]
         y = y[indices[num_valid_samples: -1]]
-        
-        
+        num_samples = x.shape[0]
+        input_dim = x.shape[1]
+        G = self.__build_graph__(input_dim, latent_dim)
+        sess = tf.Session(graph=G.graph)
+        validation_epochs = 30
+        loss_margin = 0.2
+        best_loss = np.nan
+        best_params = np.nan
+        with sess.as_default():
+            G.ops.init_vars.run()
+            head = 0
+            indices = range(num_samples)
+            for i in range(num_epochs):
+                if head + batch_size > num_samples:
+                    indices = np.random.permutation(num_samples)
+                    head = 0
+                selected = indices[head: head + batch_size]
+                head += batch_size
+                batch_x = x[selected]
+                batch_xxt = self.__calc_XXT__(batch_x)
+                batch_y = y[selected]
+                if verbose:
+                    if i % probe_epochs == 0:
+                        accuracy = G.tsr.accuracy.eval(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y})
+                        print 'epoch {s}, training batch, accuracy {a:.2f}%'.format(s=i, a=accuracy * 100.0)
+                G.ops.train_step.run(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y,
+                                                G.phr.learning_rate: learning_rate,
+                                                G.phr.penalty_w: penalty_w, G.phr.penalty_V: penalty_V})
+                if (i + 1) % validation_epochs == 0:
+                    loss = self.__calc_loss__(valid_x, valid_y, sess, G.tsr.nll, G)
+                    print 'epoch {i}, best loss {b:.4f}, loss {l:.4f}, learning_rate {r}'.format(i=i, b=best_loss, l=loss, r=learning_rate)
+                    if best_loss is np.nan:
+                        best_loss = loss
+                        best_params = {}
+                        for k, v in G.var.iteritems():
+                            best_params[k] = G.var[k].eval()
+                        print '\tinitialise best_loss and best_params'
+                    elif loss > best_loss * (1 + loss_margin):
+                        # roll back and decrease learning_rate
+                        for k, v in best_params.iteritems():
+                            sess.run(G.var[k].assign(best_params[k]))
+                        learning_rate /= 2.0
+                        print '\troll back, learning_rate {r}'.format(r=learning_rate)
+                    elif loss <= best_loss:
+                        best_loss = loss
+                        for k, v in G.var.iteritems():
+                            best_params[k] = G.var[k].eval()
+                        print '\tupdate best_loss and best_params'
+                    else:
+                        pass
+            for k, v in G.var.iteritems():
+                self.params[k] = G.var[k].eval()
+        self.updated = True
 
     def predict(self, x):
         if len(self.params) < 1:
@@ -142,6 +194,21 @@ class FactorMach(object):
             y = self.sess_run.run(self.G_run.tsr.y, feed_dict={self.G_run.phr.X: batch_x, self.G_run.phr.XXT: batch_xxt})
             predictions[a: b] = y
         return predictions
+
+    def __calc_loss__(self, x, y, sess, loss_tensor, graph):
+        num_samples = x.shape[0]
+        batch_size = 50
+        num_batches = int(np.ceil(1.0 * num_samples / batch_size))
+        loss = 0.0
+        for i in range(num_batches):
+            a = i * batch_size
+            b = min((i + 1) * batch_size, num_samples)
+            batch_x = x[a : b]
+            batch_xxt = self.__calc_XXT__(batch_x)
+            batch_y = y[a : b]
+            loss += sess.run(loss_tensor, feed_dict={graph.phr.X: batch_x, graph.phr.XXT: batch_xxt, graph.phr.y_: batch_y})
+        loss /= num_batches
+        return loss
 
     def save(self, path):
         if len(self.params) < 1:
@@ -184,8 +251,8 @@ if __name__ == '__main__':
     print 'test set: {p} positives, {n} negatives'.format(p=(test_labels==1).sum(), n=(test_labels==-1).sum())
 
     fm = FactorMach()
-    fm.fit(train_images, train_labels,
-           latent_dim=10, batch_size=50, num_epochs=100,
+    fm.fit_ada(train_images, train_labels,
+           latent_dim=10, batch_size=50, num_epochs=200,
            learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
            verbose=True, probe_epochs=10)
     predictions = fm.predict(test_images)
