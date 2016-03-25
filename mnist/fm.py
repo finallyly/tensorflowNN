@@ -111,7 +111,11 @@ class FactorMach(object):
                 self.params[k] = G.var[k].eval()
         self.updated = True
 
-    def fit_ada(self, x, y, latent_dim, batch_size, num_epochs, learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2, validation_portion=0.1, verbose=True, probe_epochs=100):
+    def fit2(self, x, y, latent_dim,
+                batch_size, num_epochs,
+                validation_epochs, patience_validations, initial_tolerance=0.1, validation_portion=0.1,
+                initial_learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2,
+                verbose=True, probe_epochs=100):
         num_samples = x.shape[0]
         num_valid_samples = int(num_samples * validation_portion)
         indices = np.random.permutation(num_samples)
@@ -124,9 +128,9 @@ class FactorMach(object):
         input_dim = x.shape[1]
         G = self.__build_graph__(input_dim, latent_dim)
         sess = tf.Session(graph=G.graph)
-        validation_epochs = 30
-        patience_epochs = 3 * validation_epochs
-        tolerance = 0.2
+        learning_rate = initial_learning_rate
+        patience_epochs = patience_validations * validation_epochs
+        tolerance = initial_tolerance
         best_loss = np.nan
         best_params = np.nan
         patience = 0
@@ -152,34 +156,39 @@ class FactorMach(object):
                                                 G.phr.penalty_w: penalty_w, G.phr.penalty_V: penalty_V})
                 if (i + 1) % validation_epochs == 0:
                     loss = self.__calc_loss__(valid_x, valid_y, sess, G.tsr.nll, G)
-                    print 'epoch {i}, best loss {b:.4f}, loss {l:.4f}, learning_rate {r}, tolerance {m:.4f}, patience {p}'.format(i=i, b=best_loss, l=loss, r=learning_rate, m=tolerance, p=patience)
+                    if verbose:
+                        print 'epoch {i}, best loss {b:.4f}, loss {l:.4f}, learning_rate {r}, tolerance {m:.4f}, patience {p}'.format(i=i, b=best_loss, l=loss, r=learning_rate, m=tolerance, p=patience)
                     if best_loss is not np.nan:
                         if np.abs(loss - best_loss) < 0.01 * best_loss:
                             patience += validation_epochs
                         else:
                             patience = 0
-                        print '\tpatience {p}'.format(p=patience)
+                        if verbose:
+                            print '\tpatience {p}'.format(p=patience)
                         if patience >= patience_epochs:
-                            print 'early stop'
+                            if verbose: print 'early stop'
                             break
                     if best_loss is np.nan:
                         best_loss = loss
                         best_params = {}
                         for k, v in G.var.iteritems():
                             best_params[k] = G.var[k].eval()
-                        print '\tinitialise best_loss and best_params'
+                        if verbose:
+                            print '\tinitialise best_loss and best_params'
                     elif loss > best_loss * (1 + tolerance):
                         # roll back and decrease learning_rate
                         for k, v in best_params.iteritems():
                             sess.run(G.var[k].assign(best_params[k]))
                         learning_rate *= 0.5
                         tolerance *= 0.5
-                        print '\troll back, learning_rate {r}, tolerance {m:.4f}'.format(r=learning_rate, m=tolerance)
+                        if verbose:
+                            print '\troll back, learning_rate {r}, tolerance {m:.4f}'.format(r=learning_rate, m=tolerance)
                     elif loss <= best_loss:
                         best_loss = loss
                         for k, v in G.var.iteritems():
                             best_params[k] = G.var[k].eval()
-                        print '\tupdate best_loss and best_params'
+                        if verbose:
+                            print '\tupdate best_loss and best_params'
                     else:
                         pass
             for k, v in G.var.iteritems():
@@ -263,10 +272,15 @@ if __name__ == '__main__':
     print 'test set: {p} positives, {n} negatives'.format(p=(test_labels==1).sum(), n=(test_labels==-1).sum())
 
     fm = FactorMach()
-    fm.fit_ada(train_images, train_labels,
-           latent_dim=10, batch_size=50, num_epochs=1000,
-           learning_rate=1e-2, penalty_w=1e-1, penalty_V=1e-2,
-           verbose=True, probe_epochs=10)
+    # fm.fit(train_images, train_labels,
+    #        latent_dim=10, batch_size=50, num_epochs=200,
+    #        learning_rate=1e-2, penalty_w=1e-1, penalty_V=1e-2,
+    #        verbose=True, probe_epochs=10)
+    fm.fit2(x=train_images, y=train_labels, latent_dim=10,
+            batch_size=50, num_epochs=1000,
+            validation_portion=0.1, validation_epochs=50, patience_validations=3, initial_tolerance=0.1,
+            initial_learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
+            verbose=True, probe_epochs=50)
     predictions = fm.predict(test_images)
     accuracy = np.mean(predictions * test_labels > 0)
     print 'test set: accuracy {a:.2f}%'.format(a=accuracy*100.0)
