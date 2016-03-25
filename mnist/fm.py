@@ -111,6 +111,17 @@ class FactorMach(object):
                 self.params[k] = G.var[k].eval()
         self.updated = True
 
+    def fit_ada(self, x, y, latent_dim, batch_size, num_epochs, learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2, validation_portion=0.1, verbose=True, probe_epochs=100):
+        num_samples = x.shape[0]
+        num_valid_samples = int(num_samples * validation_portion)
+        indices = np.random.permutation(num_samples)
+        valid_x = x[indices[0 : num_valid_samples]]
+        valid_y = y[indices[0 : num_valid_samples]]
+        x = x[indices[num_valid_samples: -1]]
+        y = y[indices[num_valid_samples: -1]]
+        
+        
+
     def predict(self, x):
         if len(self.params) < 1:
             raise Exception("empty model")
