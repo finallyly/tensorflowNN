@@ -76,7 +76,7 @@ class FactorMach(object):
     def fit(self, x, y, latent_dim, batch_size, num_epochs, learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2, verbose=True, probe_epochs=100):
         """
         :param x:
-        :param y: numpy vector, {-1, 1}
+        :param y: numpy vector, {0, 1}
         :param learning_rate:
         :param penalty_w:
         :param penalty_V:
@@ -85,9 +85,12 @@ class FactorMach(object):
         :param verbose:
         :return:
         """
+        if not(isinstance(x, np.ndarray) and isinstance(y, np.ndarray)):
+            raise Exception("both x and y should np.ndarray")
         unique_labels = np.unique(y)
-        if not (len(unique_labels) == 2 and unique_labels[0] == -1 and unique_labels[1] == 1):
-            raise Exception("labels must be {-1, 1}")
+        if not (len(unique_labels) == 2 and unique_labels[0] == 0 and unique_labels[1] == 1):
+            raise Exception("labels must be {0, 1}")
+        y = 2 * y - 1
         num_samples = x.shape[0]
         input_dim = x.shape[1]
         G = self.__build_graph__(input_dim, latent_dim)
@@ -121,6 +124,12 @@ class FactorMach(object):
                 validation_epochs, patience_validations, initial_tolerance=0.1, validation_portion=0.1,
                 initial_learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2,
                 verbose=True, probe_epochs=100):
+        if not(isinstance(x, np.ndarray) and isinstance(y, np.ndarray)):
+            raise Exception("both x and y should np.ndarray")
+        unique_labels = np.unique(y)
+        if not (len(unique_labels) == 2 and unique_labels[0] == 0 and unique_labels[1] == 1):
+            raise Exception("labels must be {0, 1}")
+        y = 2 * y - 1
         num_samples = x.shape[0]
         num_valid_samples = int(num_samples * validation_portion)
         indices = np.random.permutation(num_samples)
@@ -221,6 +230,10 @@ class FactorMach(object):
             predictions[a: b] = y
         return predictions
 
+    def predict_proba(self, x):
+        proba = self.__sigmoid__(self.predict(x))
+        return np.stack((1 - proba, proba), axis=1)
+
     def __calc_loss__(self, x, y, sess, loss_tensor, graph):
         num_samples = x.shape[0]
         batch_size = 50
@@ -249,7 +262,9 @@ class FactorMach(object):
 
     def __calc_XXT__(self, X):
         return np.apply_along_axis(lambda x: np.outer(x, x).reshape((-1)), 1, X)
-
+    
+    def __sigmoid__(self, x):
+        return 1.0 / (1 + np.power(np.e, -x))
 
 if __name__ == '__main__':
     digit1 = 5
@@ -258,27 +273,27 @@ if __name__ == '__main__':
     m = (mnist.train.labels == digit1) | ((mnist.train.labels == digit2))
     train_images = mnist.train.images[m]
     train_labels = np.float32(mnist.train.labels[m])
-    train_labels[train_labels == digit1] = -1
+    train_labels[train_labels == digit1] = 0
     train_labels[train_labels == digit2] = 1
-    print 'training set: {p} positives, {n} negatives'.format(p=(train_labels==1).sum(), n=(train_labels==-1).sum())
+    print 'training set: {p} positives, {n} negatives'.format(p=(train_labels==1).sum(), n=(train_labels==0).sum())
     
     m = (mnist.validation.labels == digit1) | ((mnist.validation.labels == digit2))
     validation_images = mnist.validation.images[m]
     validation_labels = np.float32(mnist.validation.labels[m])
-    validation_labels[validation_labels == digit1] = -1
+    validation_labels[validation_labels == digit1] = 0
     validation_labels[validation_labels == digit2] = 1
-    print 'validation set: {p} positives, {n} negatives'.format(p=(validation_labels==1).sum(), n=(validation_labels==-1).sum())
+    print 'validation set: {p} positives, {n} negatives'.format(p=(validation_labels==1).sum(), n=(validation_labels==0).sum())
     
     m = (mnist.test.labels == digit1) | ((mnist.test.labels == digit2))
     test_images = mnist.test.images[m]
     test_labels = np.float32(mnist.test.labels[m])
-    test_labels[test_labels == digit1] = -1
+    test_labels[test_labels == digit1] = 0
     test_labels[test_labels == digit2] = 1
-    print 'test set: {p} positives, {n} negatives'.format(p=(test_labels==1).sum(), n=(test_labels==-1).sum())
+    print 'test set: {p} positives, {n} negatives'.format(p=(test_labels==1).sum(), n=(test_labels==0).sum())
 
     fm = FactorMach()
     fm.fit(train_images, train_labels,
-        latent_dim=10, batch_size=50, num_epochs=500,
+        latent_dim=10, batch_size=50, num_epochs=200,
         learning_rate=1e-3, penalty_w=1e-1, penalty_V=1e-2,
         verbose=True, probe_epochs=10)
     #fm.fit2(x=train_images, y=train_labels, latent_dim=10,
@@ -287,5 +302,6 @@ if __name__ == '__main__':
     #        initial_learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
     #        verbose=True, probe_epochs=50)
     predictions = fm.predict(test_images)
+    test_labels = 2 * test_labels - 1
     accuracy = np.mean(predictions * test_labels > 0)
     print 'test set: accuracy {a:.2f}%'.format(a=accuracy*100.0)
