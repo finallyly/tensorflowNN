@@ -52,7 +52,12 @@ class FactorMach(object):
             penalty_w = tf.placeholder(tf.float32)
             penalty_V = tf.placeholder(tf.float32)
             VVT = tf.matmul(V, V, transpose_a=False, transpose_b=True)
-            y = w0 + tf.matmul(X, w) + tf.matmul(XXT, tf.reshape(VVT, [-1, 1]))
+            # drop the diagnal elements, method 1
+            #VVT_ = VVT - tf.diag(tf.reduce_sum(V**2, 1))
+            # drop the diagnal elements, method 2
+            diag_off = tf.ones([input_dim, input_dim], tf.float32) - tf.diag(tf.ones([input_dim], tf.float32))
+            VVT_ = VVT * diag_off
+            y = w0 + tf.matmul(X, w) + tf.matmul(XXT, tf.reshape(VVT_, [-1, 1]))
             y = tf.reshape(y, [-1])
             nll = -tf.reduce_mean(tf.log(tf.nn.sigmoid(y * y_)))
             reg_V = tf.reduce_sum(V * V)
@@ -272,15 +277,15 @@ if __name__ == '__main__':
     print 'test set: {p} positives, {n} negatives'.format(p=(test_labels==1).sum(), n=(test_labels==-1).sum())
 
     fm = FactorMach()
-    # fm.fit(train_images, train_labels,
-    #        latent_dim=10, batch_size=50, num_epochs=200,
-    #        learning_rate=1e-2, penalty_w=1e-1, penalty_V=1e-2,
-    #        verbose=True, probe_epochs=10)
-    fm.fit2(x=train_images, y=train_labels, latent_dim=10,
-            batch_size=50, num_epochs=1000,
-            validation_portion=0.1, validation_epochs=50, patience_validations=3, initial_tolerance=0.1,
-            initial_learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
-            verbose=True, probe_epochs=50)
+    fm.fit(train_images, train_labels,
+        latent_dim=10, batch_size=50, num_epochs=500,
+        learning_rate=1e-3, penalty_w=1e-1, penalty_V=1e-2,
+        verbose=True, probe_epochs=10)
+    #fm.fit2(x=train_images, y=train_labels, latent_dim=10,
+    #        batch_size=50, num_epochs=1000,
+    #        validation_portion=0.1, validation_epochs=50, patience_validations=3, initial_tolerance=0.1,
+    #        initial_learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
+    #        verbose=True, probe_epochs=50)
     predictions = fm.predict(test_images)
     accuracy = np.mean(predictions * test_labels > 0)
     print 'test set: accuracy {a:.2f}%'.format(a=accuracy*100.0)
