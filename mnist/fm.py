@@ -73,16 +73,21 @@ class FactorMach(object):
         ops = Struct(train_step=train_step, init_vars=init_vars)
         return GraphWrapper(graph, phr, var, tsr, ops)
 
-    def fit(self, x, y, latent_dim, batch_size, num_epochs, learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2, verbose=True, probe_epochs=100):
+    def fit(self, x, y, latent_dim, batch_size, num_epochs, penalty_w=1e-2, penalty_V=1e-2, learning_rate=1e-3, decay_rate=None, decay_epochs=None, verbose=True, probe_epochs=100):
         """
-        :param x:
-        :param y: numpy vector, {0, 1}
-        :param learning_rate:
-        :param penalty_w:
-        :param penalty_V:
+        train 2-way factorisation machine
+        :param x: 2d np.ndarray, each row stores an instance
+        :param y: 1d np.ndarray, {0, 1}
+        :param latent_dim:
         :param batch_size:
         :param num_epochs:
+        :param penalty_w:
+        :param penalty_V:
+        :param learning_rate:
+        :param decay_rate:
+        :param decay_epochs: decayed_learning_rate = learning_rate * np.power(decay_rate, int(i / decay_epochs))
         :param verbose:
+        :param probe_epochs:
         :return:
         """
         if not(isinstance(x, np.ndarray) and isinstance(y, np.ndarray)):
@@ -96,6 +101,7 @@ class FactorMach(object):
         G = self.__build_graph__(input_dim, latent_dim)
         sess = tf.Session(graph=G.graph)
         with sess.as_default():
+            np.random.seed(3)
             G.ops.init_vars.run()
             head = 0
             indices = range(num_samples)
@@ -108,108 +114,28 @@ class FactorMach(object):
                 batch_x = x[selected]
                 batch_xxt = self.__calc_XXT__(batch_x)
                 batch_y = y[selected]
-                if verbose:
-                    if i % probe_epochs == 0:
-                        accuracy = G.tsr.accuracy.eval(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y})
-                        print 'epoch {s}, training batch, accuracy {a:.2f}%'.format(s=i, a=accuracy * 100.0)
+                if verbose and i % probe_epochs == 0:
+                    accuracy = G.tsr.accuracy.eval(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y})
+                    print 'epoch {s}, training batch, accuracy {a:.2f}%'.format(s=i, a=accuracy * 100.0)
+                if decay_rate is not None:
+                    decayed_learning_rate = learning_rate * np.power(decay_rate, int(i / decay_epochs))
+                    actual_learning_rate = decayed_learning_rate
+                    if verbose and i % decay_epochs == 0:
+                        print 'epoch {e}, learning_rate {l:.8f}'.format(e=i, l=actual_learning_rate)
+                else:
+                    actual_learning_rate = learning_rate
                 G.ops.train_step.run(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y,
-                                                G.phr.learning_rate: learning_rate,
+                                                G.phr.learning_rate: actual_learning_rate,
                                                 G.phr.penalty_w: penalty_w, G.phr.penalty_V: penalty_V})
-            for k, v in G.var.iteritems():
-                self.params[k] = G.var[k].eval()
-        self.updated = True
-
-    def fit2(self, x, y, latent_dim,
-                batch_size, num_epochs,
-                validation_epochs, patience_validations, initial_tolerance=0.1, validation_portion=0.1,
-                initial_learning_rate=1e-3, penalty_w=1e-2, penalty_V=1e-2,
-                verbose=True, probe_epochs=100):
-        if not(isinstance(x, np.ndarray) and isinstance(y, np.ndarray)):
-            raise Exception("both x and y should np.ndarray")
-        unique_labels = np.unique(y)
-        if not (len(unique_labels) == 2 and unique_labels[0] == 0 and unique_labels[1] == 1):
-            raise Exception("labels must be {0, 1}")
-        y = 2 * y - 1
-        num_samples = x.shape[0]
-        num_valid_samples = int(num_samples * validation_portion)
-        indices = np.random.permutation(num_samples)
-        valid_x = x[indices[0 : num_valid_samples]]
-        valid_y = y[indices[0 : num_valid_samples]]
-
-        x = x[indices[num_valid_samples: -1]]
-        y = y[indices[num_valid_samples: -1]]
-        num_samples = x.shape[0]
-        input_dim = x.shape[1]
-        G = self.__build_graph__(input_dim, latent_dim)
-        sess = tf.Session(graph=G.graph)
-        learning_rate = initial_learning_rate
-        patience_epochs = patience_validations * validation_epochs
-        tolerance = initial_tolerance
-        best_loss = np.nan
-        best_params = np.nan
-        patience = 0
-        with sess.as_default():
-            G.ops.init_vars.run()
-            head = 0
-            indices = range(num_samples)
-            for i in range(num_epochs):
-                if head + batch_size > num_samples:
-                    indices = np.random.permutation(num_samples)
-                    head = 0
-                selected = indices[head: head + batch_size]
-                head += batch_size
-                batch_x = x[selected]
-                batch_xxt = self.__calc_XXT__(batch_x)
-                batch_y = y[selected]
-                if verbose:
-                    if i % probe_epochs == 0:
-                        accuracy = G.tsr.accuracy.eval(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y})
-                        print 'epoch {s}, training batch, accuracy {a:.2f}%'.format(s=i, a=accuracy * 100.0)
-                G.ops.train_step.run(feed_dict={G.phr.X: batch_x, G.phr.XXT: batch_xxt, G.phr.y_: batch_y,
-                                                G.phr.learning_rate: learning_rate,
-                                                G.phr.penalty_w: penalty_w, G.phr.penalty_V: penalty_V})
-                if (i + 1) % validation_epochs == 0:
-                    loss = self.__calc_loss__(valid_x, valid_y, sess, G.tsr.nll, G)
-                    if verbose:
-                        print 'epoch {i}, best loss {b:.4f}, loss {l:.4f}, learning_rate {r}, tolerance {m:.4f}, patience {p}'.format(i=i, b=best_loss, l=loss, r=learning_rate, m=tolerance, p=patience)
-                    if best_loss is not np.nan:
-                        if np.abs(loss - best_loss) < 0.01 * best_loss:
-                            patience += validation_epochs
-                        else:
-                            patience = 0
-                        if verbose:
-                            print '\tpatience {p}'.format(p=patience)
-                        if patience >= patience_epochs:
-                            if verbose: print 'early stop'
-                            break
-                    if best_loss is np.nan:
-                        best_loss = loss
-                        best_params = {}
-                        for k, v in G.var.iteritems():
-                            best_params[k] = G.var[k].eval()
-                        if verbose:
-                            print '\tinitialise best_loss and best_params'
-                    elif loss > best_loss * (1 + tolerance):
-                        # roll back and decrease learning_rate
-                        for k, v in best_params.iteritems():
-                            sess.run(G.var[k].assign(best_params[k]))
-                        learning_rate *= 0.5
-                        tolerance *= 0.5
-                        if verbose:
-                            print '\troll back, learning_rate {r}, tolerance {m:.4f}'.format(r=learning_rate, m=tolerance)
-                    elif loss <= best_loss:
-                        best_loss = loss
-                        for k, v in G.var.iteritems():
-                            best_params[k] = G.var[k].eval()
-                        if verbose:
-                            print '\tupdate best_loss and best_params'
-                    else:
-                        pass
             for k, v in G.var.iteritems():
                 self.params[k] = G.var[k].eval()
         self.updated = True
 
     def predict(self, x):
+        """
+        :param x: 2d np.ndarray, each row stores an instance
+        :return: 1d np.ndarray, ideally giving positive numbers for positive instances and negative numbers vice versus
+        """
         if len(self.params) < 1:
             raise Exception("empty model")
         if self.updated:
@@ -231,6 +157,10 @@ class FactorMach(object):
         return predictions
 
     def predict_proba(self, x):
+        """
+        :param x:
+        :return: Nx2 np.ndarray, each row stores the probabilities of belonging to the negative and positive classes
+        """
         proba = self.__sigmoid__(self.predict(x))
         return np.stack((1 - proba, proba), axis=1)
 
@@ -293,14 +223,10 @@ if __name__ == '__main__':
 
     fm = FactorMach()
     fm.fit(train_images, train_labels,
-        latent_dim=10, batch_size=50, num_epochs=200,
-        learning_rate=1e-3, penalty_w=1e-1, penalty_V=1e-2,
+        latent_dim=10, penalty_w=1e-1, penalty_V=1e-2,
+        batch_size=50, num_epochs=100,
+        learning_rate=1e-3, decay_rate=0.96, decay_epochs=30,
         verbose=True, probe_epochs=10)
-    #fm.fit2(x=train_images, y=train_labels, latent_dim=10,
-    #        batch_size=50, num_epochs=1000,
-    #        validation_portion=0.1, validation_epochs=50, patience_validations=3, initial_tolerance=0.1,
-    #        initial_learning_rate=1e-2, penalty_w=1e-2, penalty_V=1e-2,
-    #        verbose=True, probe_epochs=50)
     predictions = fm.predict(test_images)
     test_labels = 2 * test_labels - 1
     accuracy = np.mean(predictions * test_labels > 0)
