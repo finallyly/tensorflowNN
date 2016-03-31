@@ -82,7 +82,7 @@ class FactorMach(object):
         :param batch_size:
         :param num_epochs:
         :param penalty_w:
-        :param penalty_V:
+        :param penalty_V: suggest firstly trying penalty_V = penalty_w / latent_dim
         :param learning_rate:
         :param decay_rate:
         :param decay_epochs: decayed_learning_rate = learning_rate * np.power(decay_rate, int(i / decay_epochs))
@@ -223,9 +223,9 @@ if __name__ == '__main__':
 
     fm = FactorMach()
     fm.fit(train_images, train_labels,
-        latent_dim=10, penalty_w=1e-1, penalty_V=1e-2,
-        batch_size=50, num_epochs=100,
-        learning_rate=1e-3, decay_rate=0.96, decay_epochs=30,
+        latent_dim=10, penalty_w=1e-2, penalty_V=1e-3,
+        batch_size=50, num_epochs=200,
+        learning_rate=1e-3,
         verbose=True, probe_epochs=10)
     predictions = fm.predict(test_images)
     test_labels = 2 * test_labels - 1
