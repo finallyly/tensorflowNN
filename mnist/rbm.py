@@ -83,8 +83,7 @@ class RBM(object):
                 batch_v_sampling = self.gibbs_v(v0=batch_v, W=G.var.W.eval(), b=G.var.b.eval(), c=G.var.c.eval(), k=gibbs_steps)
                 if i % probe_epochs == 0:
                     loss = G.tsr.loss.eval(feed_dict={G.phr.v: batch_v, G.phr.v_sampling: batch_v_sampling})
-                    reconstruct_err = np.mean(np.abs(batch_v - batch_v_sampling))
-                    print 'step {i}, loss {l:.4f}, reconstruction err {r:.6f}'.format(i=i, l=loss, r=reconstruct_err)
+                    print 'step {i}, loss {l:.4f}'.format(i=i, l=loss)
                 G.ops.train_step.run(feed_dict={G.phr.v: batch_v, G.phr.v_sampling: batch_v_sampling, G.phr.learning_rate: learning_rate})
             for k, v in G.var.iteritems():
                 self.params[k] = G.var[k].eval()
@@ -168,14 +167,15 @@ if __name__ == "__main__":
 
     n_hidden = 500
     learning_rate = 1e-3
-    gibbs_steps = 15
+    gibbs_steps = 10
     batch_size = 100
     num_epochs = 500
     probe_epochs = 50
     rbm = RBM()
     train_x = np.float32(mnist.train.images > 0)
     rbm.fit(train_x, n_hidden=n_hidden, gibbs_steps=gibbs_steps, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
-
+    
+    # sampling from the learnt distribution, starting from real samples
     gibbs_steps = 100
     x = np.float32(mnist.test.images[0:100, :] > 0)
     image = tile_raster_images(x, (28, 28), (10, 10))
@@ -191,4 +191,22 @@ if __name__ == "__main__":
     ax.imshow(image_sampling)
     ax.axis('off')
     ax.set_title('gibbs steps {s}'.format(s=gibbs_steps))
+    fig.show()
+    
+    # sampling from the learnt distribution, starting from randoms
+    probe_steps = 50
+    v_sampling = np.zeros((100, 28*28), np.float32)
+    v0 = np.float32(np.random.random((1, 28*28)) > 0.5)
+    v = v0
+    for i in range(probe_steps * 100):
+        if i % probe_steps == 0:
+            v_sampling[int(i/probe_steps), :] = v
+        h = rbm.sample_h_given_v(v, rbm.params['W'], rbm.params['c'])
+        v = rbm.sample_v_given_h(h, rbm.params['W'], rbm.params['b'])
+    image_sampling = tile_raster_images(v_sampling, (28, 28), (10, 10))
+    image_sampling = np.stack((image_sampling, image_sampling, image_sampling), axis=2)
+    fig = plt.figure(1)
+    ax = fig.add_subplot(111)
+    ax.imshow(image_sampling)
+    ax.axis("off")
     fig.show()
