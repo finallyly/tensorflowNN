@@ -184,6 +184,7 @@ if __name__ == "__main__":
     ax = fig.add_subplot(121)
     ax.imshow(image)
     ax.axis('off')
+    np.random.seed(1)
     x_sampling = rbm.gibbs_v(x, rbm.params['W'], rbm.params['b'], rbm.params['c'], k=gibbs_steps)
     image_sampling = Image.fromarray(tile_raster_images(x_sampling, (28, 28), (10, 10)))
     image_sampling = np.stack((image_sampling, image_sampling, image_sampling), axis=2)
@@ -196,6 +197,7 @@ if __name__ == "__main__":
     # sampling from the learnt distribution, starting from randoms
     probe_steps = 50
     v_sampling = np.zeros((100, 28*28), np.float32)
+    np.random.seed(1)
     v0 = np.float32(np.random.random((1, 28*28)) > 0.5)
     v = v0
     for i in range(probe_steps * 100):
