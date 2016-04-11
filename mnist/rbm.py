@@ -68,8 +68,19 @@ class RBM(object):
         return GraphWrapper(graph, phr, var, tsr, ops)
 
     def fit(self, v, n_hidden, gibbs_steps=1, batch_size=50, num_epochs=10000, learning_rate=1e-3, probe_epochs=50):
-        if ((v == 0.0) | (v == 1.0)).sum() != v.shape[0] * v.shape[1]:
-            raise Exception('v should be binary')
+        """
+        :param v:
+        :param n_hidden:
+        :param gibbs_steps: CD-1 by default as in "Hinton, G. E. (2002). Training products of experts by minimizing contrastive divergence. Neural
+Computation, 14(8):1711–1800"
+        :param batch_size:
+        :param num_epochs:
+        :param learning_rate:
+        :param probe_epochs:
+        :return:
+        """
+        if np.min(v) < 0.0 or np.max(v) > 1.0:
+            raise Exception('v should be floating numbers within [0, 1]')
         n_visible = v.shape[1]
         print '{t} training samples'.format(t=v.shape[0])
         G = self.__build_graph__(n_visible=n_visible, n_hidden=n_hidden)
@@ -124,11 +135,11 @@ class RBM(object):
         :param k:
         :return:
         """
-        v = v0
+        v_proba = v0
         for i in range(k):
-            h = self.sample_h_given_v(v, W, c)
-            v = self.sample_v_given_h(h, W, b)
-        return v
+            h, h_proba = self.sample_h_given_v(v_proba, W, c)
+            v, v_proba = self.sample_v_given_h(h, W, b)
+        return v_proba
 
     def sample_h_given_v(self, v, W, c):
         """
@@ -138,7 +149,7 @@ class RBM(object):
         :return:
         """
         proba = self.sigmoid(np.matmul(v, W) + c)
-        return self.sample_binomial(proba)
+        return self.sample_binomial(proba), proba
 
     def sample_v_given_h(self, h, W, b):
         """
@@ -148,7 +159,7 @@ class RBM(object):
         :return:
         """
         proba = self.sigmoid(np.matmul(h, W.transpose()) + b)
-        return self.sample_binomial(proba)
+        return self.sample_binomial(proba), proba
 
     def sample_binomial(self, proba):
         """
@@ -167,17 +178,16 @@ if __name__ == "__main__":
 
     n_hidden = 500
     learning_rate = 1e-3
-    gibbs_steps = 10
-    batch_size = 100
-    num_epochs = 500
+    batch_size = 50
+    num_epochs = 2000
     probe_epochs = 50
     rbm = RBM()
-    train_x = np.float32(mnist.train.images > 0)
-    rbm.fit(train_x, n_hidden=n_hidden, gibbs_steps=gibbs_steps, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
+    train_x = mnist.train.images
+    rbm.fit(train_x, n_hidden=n_hidden, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
     
     # sampling from the learnt distribution, starting from real samples
-    gibbs_steps = 100
-    x = np.float32(mnist.test.images[0:100, :] > 0)
+    gibbs_steps = 1
+    x = mnist.test.images[0:100, :]
     image = tile_raster_images(x, (28, 28), (10, 10))
     image = np.stack((image, image, image), axis=2)
     fig = plt.figure(0)
@@ -194,15 +204,15 @@ if __name__ == "__main__":
     fig.show()
     
     # sampling from the learnt distribution, starting from randoms
-    probe_steps = 50
+    probe_steps = 200
     v_sampling = np.zeros((100, 28*28), np.float32)
-    v0 = np.float32(np.random.random((1, 28*28)) > 0.5)
-    v = v0
+    v0 = mnist.test.images[0, :]
+    v_proba = v0
     for i in range(probe_steps * 100):
         if i % probe_steps == 0:
-            v_sampling[int(i/probe_steps), :] = v
-        h = rbm.sample_h_given_v(v, rbm.params['W'], rbm.params['c'])
-        v = rbm.sample_v_given_h(h, rbm.params['W'], rbm.params['b'])
+            v_sampling[int(i/probe_steps), :] = v_proba
+        h, h_proba = rbm.sample_h_given_v(v_proba, rbm.params['W'], rbm.params['c'])
+        v, v_proba = rbm.sample_v_given_h(h, rbm.params['W'], rbm.params['b'])
     image_sampling = tile_raster_images(v_sampling, (28, 28), (10, 10))
     image_sampling = np.stack((image_sampling, image_sampling, image_sampling), axis=2)
     fig = plt.figure(1)
