@@ -67,11 +67,25 @@ class RBM(object):
         ops = Struct(train_step=train_step, init_vars=init_vars)
         return GraphWrapper(graph, phr, var, tsr, ops)
 
-    def fit(self, v, n_hidden, gibbs_steps=1, batch_size=50, num_epochs=10000, learning_rate=1e-3, probe_epochs=50):
+    def fit(self, v, n_hidden, gibbs_steps=1, batch_size=50, num_epochs=10000, learning_rate=1e-3, validation_v=None, probe_epochs=50):
+        """
+        :param v: 2d np.ndarray, each row stores a sample
+        :param n_hidden:
+        :param gibbs_steps:
+        :param batch_size:
+        :param num_epochs:
+        :param learning_rate:
+        :param validation_v: 
+        :param probe_epochs:
+        :return:
+        """
         if ((v == 0.0) | (v == 1.0)).sum() != v.shape[0] * v.shape[1]:
             raise Exception('v should be binary')
         n_visible = v.shape[1]
-        print '{t} training samples'.format(t=v.shape[0])
+        msg = '{t} training samples'.format(t=v.shape[0])
+        if validation_v is not None:
+            msg += ', {v} validation samples'.format(v=validation_v.shape[0])
+        print msg
         G = self.__build_graph__(n_visible=n_visible, n_hidden=n_hidden)
         sess = tf.Session(graph=G.graph)
         with sess.as_default():
@@ -83,7 +97,13 @@ class RBM(object):
                 batch_v_sampling = self.gibbs_v(v0=batch_v, W=G.var.W.eval(), b=G.var.b.eval(), c=G.var.c.eval(), k=gibbs_steps)
                 if i % probe_epochs == 0:
                     loss = G.tsr.loss.eval(feed_dict={G.phr.v: batch_v, G.phr.v_sampling: batch_v_sampling})
-                    print 'step {i}, loss {l:.4f}'.format(i=i, l=loss)
+                    msg = 'step {i}, loss {l:.4f}'.format(i=i, l=loss)
+                    if validation_v is not None:
+                        # reconstruct the visible units by single step Gibbs sampling
+                        reconstruct_v = self.gibbs_v(v0=validation_v, W=G.var.W.eval(), b=G.var.b.eval(), c=G.var.c.eval(), k=1)
+                        mae = 1.0 * np.abs(reconstruct_v - validation_v).sum() / validation_v.shape[0]
+                        msg += ", validation reconstruct MAE {e:.4f}".format(e=mae)
+                    print msg
                 G.ops.train_step.run(feed_dict={G.phr.v: batch_v, G.phr.v_sampling: batch_v_sampling, G.phr.learning_rate: learning_rate})
             for k, v in G.var.iteritems():
                 self.params[k] = G.var[k].eval()
@@ -163,20 +183,22 @@ class RBM(object):
 
 if __name__ == "__main__":
     plt.close('all')
+    np.random.seed(1)
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
 
     n_hidden = 500
     learning_rate = 1e-3
     gibbs_steps = 10
     batch_size = 100
-    num_epochs = 500
+    num_epochs = 2000
     probe_epochs = 50
     rbm = RBM()
-    train_x = np.float32(mnist.train.images > 0)
-    rbm.fit(train_x, n_hidden=n_hidden, gibbs_steps=gibbs_steps, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
+    train_v = np.float32(mnist.train.images > 0)
+    validation_v = np.float32(mnist.validation.images[np.random.permutation(mnist.validation.images.shape[0])][0:1000] > 0)
+    rbm.fit(train_v, validation_v=validation_v, n_hidden=n_hidden, gibbs_steps=gibbs_steps, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
     
     # sampling from the learnt distribution, starting from real samples
-    gibbs_steps = 100
+    gibbs_steps = 1
     x = np.float32(mnist.test.images[0:100, :] > 0)
     image = tile_raster_images(x, (28, 28), (10, 10))
     image = np.stack((image, image, image), axis=2)
@@ -195,7 +217,7 @@ if __name__ == "__main__":
     fig.show()
     
     # sampling from the learnt distribution, starting from randoms
-    probe_steps = 50
+    probe_steps = 100
     v_sampling = np.zeros((100, 28*28), np.float32)
     np.random.seed(1)
     v0 = np.float32(np.random.random((1, 28*28)) > 0.5)
