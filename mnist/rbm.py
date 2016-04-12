@@ -34,13 +34,13 @@ class RBM(object):
         if validation_v is not None:
             msg += ', {v} validation samples'.format(v=validation_v.shape[0])
         print msg
-        G = self.__build_graph__(n_visible=n_visible, n_hidden=n_hidden)
+        G = self.__build_graph__(n_visible=n_visible, n_hidden=self.n_hidden)
         sess = tf.Session(graph=G.graph)
         with sess.as_default():
             np.random.seed(3)
             G.ops.init_vars.run()
-            dataset = self.iterate_dataset(v, batch_size)
-            for i in range(num_epochs):
+            dataset = self.iterate_dataset(v, self.batch_size)
+            for i in range(self.num_epochs):
                 batch_v = dataset.next()
                 batch_v_sampling = self.gibbs_v(v0=batch_v, W=G.var.W.eval(), b=G.var.b.eval(), c=G.var.c.eval(), k=self.gibbs_steps)
                 if i % self.probe_epochs == 0:
@@ -152,7 +152,7 @@ class RBM(object):
         return 1.0 / (1.0 + np.exp(-x))
 
 
-if __name__ == "__main__":
+def test_rbm():
     plt.close('all')
     np.random.seed(1)
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
@@ -205,3 +205,7 @@ if __name__ == "__main__":
     ax.imshow(image_sampling)
     ax.axis("off")
     fig.show()
+
+
+if __name__ == "__main__":
+    test_rbm()
