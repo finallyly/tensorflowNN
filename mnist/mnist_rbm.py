@@ -7,7 +7,7 @@ import Image
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
 
-from utils import tile_raster_images
+from util import tile_raster_images
 
 # def sample_binomial(proba, seed=None):
 #     """

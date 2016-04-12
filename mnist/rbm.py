@@ -7,21 +7,8 @@ import Image
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
 
-from utils import tile_raster_images
-
-class Struct(dict):
-    def __init__(self, **kwargs):
-        super(Struct, self).__init__(**kwargs)
-        self.__dict__ = self
-
-
-class GraphWrapper(object):
-    def __init__(self, graph, phr, var, tsr, ops):
-        self.graph = graph
-        self.phr = phr
-        self.var = var
-        self.tsr = tsr
-        self.ops = ops
+from util import tile_raster_images
+from tf_util import Struct, GraphWrapper
 
 
 class RBM(object):
@@ -75,7 +62,7 @@ class RBM(object):
         :param batch_size:
         :param num_epochs:
         :param learning_rate:
-        :param validation_v: 
+        :param validation_v:
         :param probe_epochs:
         :return:
         """
