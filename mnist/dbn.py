@@ -91,8 +91,25 @@ class DBN(object):
             for k, v in G.var.iteritems():
                 self.params[k] = sess.run(v)
     
-    def fit(self, v, targets):
-        self.finetune(v, targets)
+    def fit(self, x, targets):
+        self.finetune(x, targets)
+
+    def predict_proba(self, x):
+        num_samples = x.shape[0]
+        n_visible = x.shape[1]
+        print '{s} samples in R^{v}'.format(s=num_samples, v=n_visible)
+        G = self.__build_graph__()
+        sess = tf.Session(graph=G.graph)
+        with sess.as_default():
+            feed_dict = dict([(k, v) for k, v in zip(G.var.W_list, self.params['W_list'])])
+            feed_dict.update(dict([(k, v) for k, v in zip(G.var.bias_list, self.params['bias_list'])]))
+            feed_dict.update({G.phr.x: x})
+            predict = G.tsr.y.eval(feed_dict=feed_dict)
+            return predict
+
+    def predict(self, x):
+        proba = self.predict_proba(x)
+        return np.argmax(proba, axis=1)
 
 
 def pretrain_rbm_layers(v, validation_v=None, n_hidden=[], gibbs_steps=[], batch_size=[], num_epochs=[], learning_rate=[], probe_epochs=[]):
@@ -123,6 +140,9 @@ def pretrain_rbm_layers(v, validation_v=None, n_hidden=[], gibbs_steps=[], batch
     return rbm_layers
     
 def test_dbn():
+    pass
+    
+if __name__ == "__main__":
     plt.close('all')
     np.random.seed(1)
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
@@ -130,12 +150,12 @@ def test_dbn():
     train_y = mnist.train.labels
     validation_x = np.float32(mnist.validation.images[np.random.permutation(mnist.validation.images.shape[0])][0:1000] > 0)
 
-    n_hidden = [500, 300]
-    learning_rate = [1e-2] * 2
+    n_hidden = [500, 500]
+    learning_rate = [1e-3] * 2
     gibbs_steps = [10] * 2
-    batch_size = [100] * 2
-    num_epochs = [1000] * 2
-    probe_epochs = [50] * 2
+    batch_size = [50] * 2
+    num_epochs = [2000] * 2
+    probe_epochs = [100] * 2
     rbm_layers = pretrain_rbm_layers(train_x,
                                      validation_x,
                                      n_hidden=n_hidden,
@@ -149,10 +169,13 @@ def test_dbn():
               n_visible=28*28,
               num_classes=10,
               learning_rate=1e-3,
-              batch_size=100,
-              num_epochs=1000,
-              probe_epochs=50)
+              batch_size=50,
+              num_epochs=10000,
+              probe_epochs=100)
     dbn.fit(train_x, train_y)
-    
-if __name__ == "__main__":
-    test_dbn()
+    # test
+    test_x = np.float32(mnist.test.images > 0)
+    test_y = mnist.test.labels
+    predicted_labels = dbn.predict(test_x)
+    accuracy = np.mean(predicted_labels == test_y)
+    print '{s} test samples, accuracy {a:.2f}%'.format(s=test_x.shape[0], a=accuracy*100.0)
