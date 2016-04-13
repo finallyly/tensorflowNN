@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
 
 from util import tile_raster_images
-from tf_util import Struct, GraphWrapper, sigmoid
+from tf_util import Struct, GraphWrapper, iterate_dataset, ordinal_to_onehot
 from rbm import RBM
 
 
@@ -25,7 +25,7 @@ class DBN(object):
         self.batch_size = batch_size
         self.num_epochs = num_epochs
         self.probe_epochs = probe_epochs
-        self.params = []
+        self.params = {}
     
     def __build_graph__(self):
         n_rbm_layers = len(self.rbm_layers)
@@ -37,18 +37,22 @@ class DBN(object):
             W_list = []
             bias_list = []
             # rbm layers
-            for i, rbm in zip(range(n_rbm_layers, self.rbm_layers)):
+            for i, rbm in zip(range(n_rbm_layers), self.rbm_layers):
                 W = tf.Variable(initial_value=rbm.params['W'], trainable=True)
                 c = tf.Variable(initial_value=rbm.params['c'], trainable=True)
+                print '{i}th rbm layer, n_visible {v}, n_hidden {h}'\
+                    .format(i=i, v=rbm.params['W'].shape[0], h=rbm.params['W'].shape[1])
                 h = tf.sigmoid(tf.matmul(v, W) + c)
                 W_list.append(W)
                 bias_list.append(c)
                 v = h
             # softmax layer
+            n_hidden_last_rbm = self.rbm_layers[-1].params['c'].shape[0]
+            print 'n_hidden_last_rbm = {n}'.format(n=n_hidden_last_rbm)
             initial_W = np.float32(np.random.uniform(
-                low=-4 * np.sqrt(6.0 / (self.n_visible + self.num_classes)),
-                high=4 * np.sqrt(6.0 / (self.n_visible + self.num_classes)),
-                size=(self.n_visible, self.num_classes)
+                low=-4 * np.sqrt(6.0 / (n_hidden_last_rbm + self.num_classes)),
+                high=4 * np.sqrt(6.0 / (n_hidden_last_rbm + self.num_classes)),
+                size=(n_hidden_last_rbm, self.num_classes)
             ))
             W = tf.Variable(initial_W)
             b = tf.Variable(tf.zeros([self.num_classes]))
@@ -66,7 +70,25 @@ class DBN(object):
         return GraphWrapper(graph, phr, var, tsr, ops)
     
     def finetune(self, x, y):
-        pass
+        num_samples = x.shape[0]
+        n_visible = x.shape[1]
+        num_classes = y.max() + 1
+        print '{s} samples in R^{v}, {c} classes'.format(s=num_samples, v=n_visible, c=num_classes)
+        y = ordinal_to_onehot(y)
+        G = self.__build_graph__()
+        sess = tf.Session(graph=G.graph)
+        with sess.as_default():
+            np.random.seed(3)
+            G.ops.init_vars.run()
+            dataset = iterate_dataset(x, y, self.batch_size)
+            for i in range(self.num_epochs):
+                batch_x, batch_y = dataset.next()
+                if i % self.probe_epochs == 0:
+                    accuracy = G.tsr.accuracy.eval(feed_dict={G.phr.x: batch_x, G.phr.y_: batch_y})
+                    print 'step {i}, accuracy on the batch {a:.2f}%'.format(i=i, a=accuracy*100.0)
+                G.ops.train_step.run(feed_dict={G.phr.x: batch_x, G.phr.y_: batch_y})
+            for k, v in G.var.iteritems():
+                self.params[k] = sess.run(v)
     
     def fit(self, v, targets):
         self.finetune(v, targets)
@@ -99,25 +121,37 @@ def pretrain_rbm_layers(v, validation_v=None, n_hidden=[], gibbs_steps=[], batch
         validation_input = validation_output
     return rbm_layers
     
-
-if __name__ == "__main__":
+def test_dbn():
     plt.close('all')
     np.random.seed(1)
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
-    train_v = np.float32(mnist.train.images > 0)
-    validation_v = np.float32(mnist.validation.images[np.random.permutation(mnist.validation.images.shape[0])][0:1000] > 0)
+    train_x = np.float32(mnist.train.images > 0)
+    train_y = mnist.train.labels
+    validation_x = np.float32(mnist.validation.images[np.random.permutation(mnist.validation.images.shape[0])][0:1000] > 0)
 
     n_hidden = [500, 300]
     learning_rate = [1e-2] * 2
     gibbs_steps = [10] * 2
     batch_size = [100] * 2
-    num_epochs = [500] * 2
+    num_epochs = [1000] * 2
     probe_epochs = [50] * 2
-    rbm_layers = pretrain_rbm_layers(train_v,
-                                     validation_v,
+    rbm_layers = pretrain_rbm_layers(train_x,
+                                     validation_x,
                                      n_hidden=n_hidden,
                                      gibbs_steps=gibbs_steps,
                                      batch_size=batch_size,
                                      num_epochs=num_epochs,
                                      learning_rate=learning_rate,
                                      probe_epochs=probe_epochs)
+
+    dbn = DBN(rbm_layers=rbm_layers,
+              n_visible=28*28,
+              num_classes=10,
+              learning_rate=1e-3,
+              batch_size=100,
+              num_epochs=1000,
+              probe_epochs=50)
+    dbn.fit(train_x, train_y)
+    
+if __name__ == "__main__":
+    test_dbn()
