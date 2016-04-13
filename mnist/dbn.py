@@ -28,6 +28,7 @@ class DBN(object):
         self.params = {}
     
     def __build_graph__(self):
+        print 'building graph...'
         n_rbm_layers = len(self.rbm_layers)
         graph = tf.Graph()
         with graph.as_default():

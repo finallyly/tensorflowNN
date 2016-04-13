@@ -33,6 +33,7 @@ class RBM(object):
         msg = '{t} training samples'.format(t=v.shape[0])
         if validation_v is not None:
             msg += ', {v} validation samples'.format(v=validation_v.shape[0])
+        msg += ', R^{d}'.format(d=n_visible)
         print msg
         G = self.__build_graph__(n_visible=n_visible, n_hidden=self.n_hidden)
         sess = tf.Session(graph=G.graph)
