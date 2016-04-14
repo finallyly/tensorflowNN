@@ -151,11 +151,11 @@ if __name__ == "__main__":
     validation_x = np.float32(mnist.validation.images[np.random.permutation(mnist.validation.images.shape[0])][0:1000] > 0)
 
     n_hidden = [500, 500]
-    learning_rate = [1e-3] * 2
-    gibbs_steps = [10] * 2
-    batch_size = [50] * 2
-    num_epochs = [2000] * 2
-    probe_epochs = [100] * 2
+    learning_rate = [1e-3, 1e-3]
+    gibbs_steps = [10] * len(n_hidden)
+    batch_size = [50] * len(n_hidden)
+    num_epochs = [2000] * len(n_hidden)
+    probe_epochs = [100] * len(n_hidden)
     rbm_layers = pretrain_rbm_layers(train_x,
                                      validation_x,
                                      n_hidden=n_hidden,
