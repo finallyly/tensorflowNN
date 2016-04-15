@@ -7,8 +7,8 @@ import Image
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
 
-from util import tile_raster_images
-from tf_util import Struct, GraphWrapper, iterate_dataset, ordinal_to_onehot
+from vis_util import tile_raster_images
+from util import Struct, GraphWrapper, iterate_dataset, ordinal_to_onehot
 from rbm import RBM
 
 

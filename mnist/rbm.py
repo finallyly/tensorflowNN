@@ -7,13 +7,14 @@ import Image
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
 
-from util import tile_raster_images
-from tf_util import Struct, GraphWrapper
+from vis_util import tile_raster_images
+from util import Struct, GraphWrapper, iterate_dataset, sigmoid, sample_binomial
 
 
 class RBM(object):
-    def __init__(self, n_hidden, gibbs_steps=1, batch_size=50, num_epochs=10000, learning_rate=1e-3, probe_epochs=50):
+    def __init__(self, n_visible, n_hidden, gibbs_steps=1, batch_size=50, num_epochs=10000, learning_rate=1e-3, probe_epochs=50):
         self.params = {}
+        self.n_visible = n_visible
         self.n_hidden = n_hidden
         self.gibbs_steps = gibbs_steps
         self.batch_size = batch_size
@@ -29,18 +30,17 @@ class RBM(object):
         """
         if ((v == 0.0) | (v == 1.0)).sum() != v.shape[0] * v.shape[1]:
             raise Exception('v should be binary')
-        n_visible = v.shape[1]
         msg = '{t} training samples'.format(t=v.shape[0])
         if validation_v is not None:
             msg += ', {v} validation samples'.format(v=validation_v.shape[0])
-        msg += ', R^{d}'.format(d=n_visible)
+        msg += ', R^{d}'.format(d=v.shape[1])
         print msg
-        G = self.__build_graph__(n_visible=n_visible, n_hidden=self.n_hidden)
+        G = self.__build_graph__()
         sess = tf.Session(graph=G.graph)
         with sess.as_default():
             np.random.seed(3)
             G.ops.init_vars.run()
-            dataset = self.iterate_dataset(v, self.batch_size)
+            dataset = iterate_dataset(v, None, self.batch_size)
             for i in range(self.num_epochs):
                 batch_v = dataset.next()
                 batch_v_sampling = self.gibbs_v(v0=batch_v, W=G.var.W.eval(), b=G.var.b.eval(), c=G.var.c.eval(), k=self.gibbs_steps)
@@ -58,19 +58,19 @@ class RBM(object):
                 self.params[k] = G.var[k].eval()
         self.updated = True
 
-    def __build_graph__(self, n_visible, n_hidden):
+    def __build_graph__(self):
         graph = tf.Graph()
         with graph.as_default():
             initial_W = np.float32(np.random.uniform(
-                low=-4 * np.sqrt(6.0 / (n_hidden + n_visible)),
-                high=4 * np.sqrt(6.0 / (n_hidden + n_visible)),
-                size=(n_visible, n_hidden)
+                low=-4 * np.sqrt(6.0 / (self.n_hidden + self.n_visible)),
+                high=4 * np.sqrt(6.0 / (self.n_hidden + self.n_visible)),
+                size=(self.n_visible, self.n_hidden)
             ))
             W = tf.Variable(initial_value=initial_W, trainable=True)
-            b = tf.Variable(np.zeros((n_visible,), np.float32), trainable=True)
-            c = tf.Variable(np.zeros((n_hidden,), np.float32), trainable=True)
-            v = tf.placeholder(tf.float32, [None, n_visible])
-            v_sampling = tf.placeholder(tf.float32, [None, n_visible])
+            b = tf.Variable(np.zeros((self.n_visible,), np.float32), trainable=True)
+            c = tf.Variable(np.zeros((self.n_hidden,), np.float32), trainable=True)
+            v = tf.placeholder(tf.float32, [None, self.n_visible])
+            v_sampling = tf.placeholder(tf.float32, [None, self.n_visible])
             learning_rate = tf.placeholder(tf.float32)
             loss = tf.reduce_mean(self.__calc_free_energy__(v, W, b, c)) - tf.reduce_mean(self.__calc_free_energy__(v_sampling, W, b, c))
             train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss)
@@ -91,23 +91,8 @@ class RBM(object):
         """
         return -tf.reshape(tf.matmul(V, tf.reshape(b, [-1, 1])), [-1]) - tf.reduce_sum(tf.log(1 + tf.exp(c + tf.matmul(V, W))), reduction_indices=1)
 
-    def iterate_dataset(self, v, batch_size):
-        """
-        :param v: 2d np.array, each row stores an instance
-        :return:
-        """
-        i = 0
-        n_samples = v.shape[0]
-        indices = np.random.permutation(n_samples)
-        while True:
-            if i + batch_size > n_samples:
-                indices = np.random.permutation(n_samples)
-                i = 0
-            selected = indices[i : i + batch_size]
-            i += batch_size
-            yield v[selected]
-
-    def gibbs_v(self, v0, W, b, c, k=1):
+    @staticmethod
+    def gibbs_v(v0, W, b, c, k=1):
         """
         :param v0: 2d np.ndarray, (N, n_visible)
         :param W: 2d np.nadarray, (n_visible, n_hidden)
@@ -118,39 +103,31 @@ class RBM(object):
         """
         v = v0
         for i in range(k):
-            h = self.sample_h_given_v(v, W, c)
-            v = self.sample_v_given_h(h, W, b)
+            h = RBM.sample_h_given_v(v, W, c)
+            v = RBM.sample_v_given_h(h, W, b)
         return v
 
-    def sample_h_given_v(self, v, W, c):
+    @staticmethod
+    def sample_h_given_v(v, W, c):
         """
         :param v: 2d np.ndarray, (N, n_visible)
         :param W: 2d np.nadarray, (n_visible, n_hidden)
         :param c: 1d np.ndarray, (n_hidden, )
         :return:
         """
-        proba = self.sigmoid(np.matmul(v, W) + c)
-        return self.sample_binomial(proba)
+        proba = sigmoid(np.matmul(v, W) + c)
+        return sample_binomial(proba)
 
-    def sample_v_given_h(self, h, W, b):
+    @staticmethod
+    def sample_v_given_h(h, W, b):
         """
         :param v: 2d np.ndarray, (N, n_visible)
         :param W: 2d np.nadarray, (n_visible, n_hidden)
         :param b: 1d np.ndarray, (n_visible, )
         :return:
         """
-        proba = self.sigmoid(np.matmul(h, W.transpose()) + b)
-        return self.sample_binomial(proba)
-
-    def sample_binomial(self, proba):
-        """
-        :param proba: success probability, np.ndarray
-        :return:
-        """
-        return np.float32(np.random.uniform(low=0.0, high=1.0, size=proba.shape) < proba)
-
-    def sigmoid(self, x):
-        return 1.0 / (1.0 + np.exp(-x))
+        proba = sigmoid(np.matmul(h, W.transpose()) + b)
+        return sample_binomial(proba)
 
 
 def test_rbm():
@@ -164,7 +141,7 @@ def test_rbm():
     batch_size = 100
     num_epochs = 500
     probe_epochs = 50
-    rbm = RBM(n_hidden=n_hidden, gibbs_steps=gibbs_steps, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
+    rbm = RBM(n_visible=28*28, n_hidden=n_hidden, gibbs_steps=gibbs_steps, batch_size=batch_size, num_epochs=num_epochs, learning_rate=learning_rate, probe_epochs=probe_epochs)
     train_v = np.float32(mnist.train.images > 0)
     validation_v = np.float32(mnist.validation.images[np.random.permutation(mnist.validation.images.shape[0])][0:1000] > 0)
     rbm.fit(train_v, validation_v)
