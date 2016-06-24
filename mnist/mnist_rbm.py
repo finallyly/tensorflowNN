@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 import cPickle
 import copy
-import Image
+from PIL import Image
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     plt.close('all')
     np.random.seed(1121)
 
-    mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)    
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
     n_visible = 28 * 28
     n_hidden = 500
     batch_size = 100
@@ -91,12 +91,12 @@ if __name__ == '__main__':
         batch_v, _ = mnist.train.next_batch(batch_size)
         batch_v = np.float32(batch_v > 0)
         batch_v_sampling = gibbs_v(batch_v, sess.run(W), sess.run(b), sess.run(c), k=15)
-        
+
         if i % 50 == 0:
             loss_this_batch = sess.run(loss, feed_dict={v: batch_v, v_sampling: batch_v_sampling})
             reconstruct_err = np.mean(np.abs(batch_v - batch_v_sampling))
             print 'step {i}, loss {l:.4f}, reconstruction err {r:.6f}'.format(i=i, l=loss_this_batch, r=reconstruct_err)
-        
+
             x = np.float32(mnist.test.images[0:100, :] > 0)
             image = tile_raster_images(x, (28, 28), (10, 10))
             image = np.stack((image, image, image), axis=2)
@@ -111,5 +111,5 @@ if __name__ == '__main__':
             ax.imshow(image_sampling)
             ax.axis('off')
             fig.savefig("results/step{i}.png".format(i=i))
-        
+
         sess.run(train_step, feed_dict={v: batch_v, v_sampling: batch_v_sampling})
