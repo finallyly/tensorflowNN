@@ -6,10 +6,12 @@ import cPickle
 
 
 class BasicLSTM(object):
-    def __init__(self, hidden_size, input_size, output_size):
+    def __init__(self, hidden_size, input_size, output_size, num_steps, learning_rate):
         self.hidden_size = hidden_size
         self.input_size = input_size
         self.output_size = output_size
+        self.num_steps = num_steps
+        self.learning_rate = learning_rate
         with tf.variable_scope(type(self).__name__, reuse=False):
             # TODO: use tensor array
             # forget gate
@@ -37,16 +39,8 @@ class BasicLSTM(object):
                                  dtype=np.float32, initializer=tf.uniform_unit_scaling_initializer())
             bout = tf.get_variable("bout", shape=self.output_size, dtype=np.float32,
                                  initializer=tf.constant_initializer(0.0))
-
-    def __call__(self, inputs, targets):
-        """
-
-        :param inputs: 2d np.array, each row is an instance
-        :param targets: 2d np.array, each row is a onehot label
-        :return:
-        """
-        num_steps = inputs.shape[0]
-        assert(inputs.shape[1] == self.input_size)
+        inputs = tf.placeholder(dtype=tf.float32, shape=[self.num_steps, self.input_size])
+        targets = tf.placeholder(dtype=tf.float32, shape=[self.num_steps, self.input_size])
         h = tf.constant(np.zeros(self.hidden_size), dtype=tf.float32)
         c = tf.constant(np.zeros(self.hidden_size), dtype=tf.float32)
         loss = 0
@@ -64,7 +58,7 @@ class BasicLSTM(object):
                 Wout = tf.get_variable("Wout")
                 bout = tf.get_variable("bout")
             x = inputs[t, :]
-            y = targets[t]
+            y = targets[t, :]
             h_x = tf.reshape(array_ops.concat(0, (h, x)), [-1, 1])
             # forget gate
             f = tf.sigmoid(tf.reshape(tf.matmul(Wf, h_x), [-1]) + bf)
@@ -82,24 +76,43 @@ class BasicLSTM(object):
             output = tf.reshape(tf.nn.softmax(tf.reshape(output, [1, -1])), [-1])
             loss += -tf.reduce_sum(tf.log(output) * y)
         loss /= num_steps
-        return loss
+        train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
+
+        self.inputs = inputs
+        self.targets = targets
+        self.loss = loss
+        self.train_step = train_step
         
 
 if __name__ == '__main__':
-    dataset = cPickle.load(open('MNIST_data/mnist_seq.pkl', 'rb'))
+    dataset_overall = cPickle.load(open('MNIST_data/mnist_seq.pkl', 'rb'))
+    dataset = []
+    for x, y in dataset_overall:
+        len_x = len(x)
+        if len_x >= 42 and len_x <= 46:
+            dataset.append(x[0:42])
 
     output_size = input_size = 196
+    num_steps = 41
     hidden_size = 100
-    lstm_cell = BasicLSTM(input_size=input_size, hidden_size=hidden_size, output_size=output_size)
-
-    x = dataset[0][0]
-    X = np.zeros((len(x), input_size), np.float32)
-    X[np.arange(0, X.shape[0]), x] = 1.0
-    data = X[0:-1, :]
-    target = X[1:, :]
-    loss = lstm_cell(data, target)
+    learning_rate = 1e-3
+    num_epochs = 10
+    
+    print 'building tensor graph'
+    lstm = BasicLSTM(input_size=input_size, hidden_size=hidden_size, output_size=output_size,
+                     num_steps=num_steps, learning_rate=learning_rate)
+    print 'tensor graph built'
     
     sess = tf.Session()
     sess.run(tf.initialize_all_variables())
-    l = sess.run(loss)
-    
+    cnt = 0
+    for epoch in range(num_epochs):
+        for x in dataset:
+            X = np.zeros((len(x), input_size), np.float32)
+            X[np.arange(0, X.shape[0]), x] = 1.0
+            data = X[0:-1, :]
+            target = X[1:, :]
+            _, loss = sess.run([lstm.train_step, lstm.loss], feed_dict={lstm.inputs: data, lstm.targets: target})
+            cnt += 1
+            if cnt % 100 == 1:
+                print '{n} samples processed, loss {l:.4f}'.format(n=cnt, l=loss)
