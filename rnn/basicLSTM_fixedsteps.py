@@ -25,10 +25,11 @@ class BasicLSTM(object):
                 else:
                     raise Exception(var)
             # output matrix
-            Wout = tf.get_variable("Wout", shape=(self.output_size, self.hidden_size),
-                                 dtype=np.float32, initializer=tf.uniform_unit_scaling_initializer())
-            bout = tf.get_variable("bout", shape=self.output_size, dtype=np.float32,
-                                 initializer=tf.constant_initializer(0.0))
+            tf.get_variable("Wout", shape=(self.output_size, self.hidden_size),
+                            dtype=np.float32, initializer=tf.uniform_unit_scaling_initializer())
+            tf.get_variable("bout", shape=self.output_size, dtype=np.float32,
+                            initializer=tf.constant_initializer(0.0))
+        self.var_names = var_names + ['Wout', 'bout']
         inputs = tf.placeholder(dtype=tf.float32, shape=[self.num_steps, self.input_size])
         targets = tf.placeholder(dtype=tf.float32, shape=[self.num_steps, self.input_size])
         target_weights = tf.placeholder(dtype=tf.float32, shape=[self.num_steps])
@@ -36,14 +37,12 @@ class BasicLSTM(object):
         c = tf.constant(np.zeros(self.hidden_size), dtype=tf.float32)
         loss = 0
         for t in range(0, num_steps):
-            #TODO: dig into the use of variable scope
+            # TODO: use miniBatch
             with tf.variable_scope(type(self).__name__, reuse=True):
                 var_list = []
-                for var in var_names:
+                for var in self.var_names:
                     var_list.append(tf.get_variable(var))
-                Wf, bf, Wi, bi, Wo, bo, Wc, bc = var_list
-                Wout = tf.get_variable("Wout")
-                bout = tf.get_variable("bout")
+                Wf, bf, Wi, bi, Wo, bo, Wc, bc, Wout, bout = var_list
             x = inputs[t, :]
             y = targets[t, :]
             y_weights = target_weights[t]
@@ -77,7 +76,7 @@ if __name__ == '__main__':
     dataset = cPickle.load(open('MNIST_data/mnist_seq.pkl', 'rb'))
     print '{n} samples in the original dataset'.format(n=len(dataset))
     dataset = [x for x, y in dataset]
-    vocab_size = 198 # including eos and padding
+    input_size = vocab_size = 198 # including eos and padding
     eos = 196
     padding = 197
     seq_size = 50
@@ -98,7 +97,7 @@ if __name__ == '__main__':
     output_size = input_size = vocab_size
     hidden_size = 100
     learning_rate = 1e-3
-    num_epochs = 1
+    num_epochs = 10
     num_steps = seq_size - 1
     
     dataset_ = []
@@ -114,28 +113,39 @@ if __name__ == '__main__':
     
     np.random.seed(0)
     dataset = [dataset[i] for i in np.random.permutation(len(dataset))]
-    split_point = int(0.95 * len(dataset))
+    split_point = int(0.9 * len(dataset))
     train_set = dataset[0 : split_point]
     valid_set = dataset[split_point :]
+    print '{nt} training samples, {nv} validation samples'.format(nt=len(train_set), nv=len(valid_set))
     
     print 'building tensor graph...'
     lstm = BasicLSTM(input_size=input_size, hidden_size=hidden_size, output_size=output_size,
                      num_steps=num_steps, learning_rate=learning_rate)
     print 'tensor graph built.'
     
-    sess = tf.Session()
-    sess.run(tf.initialize_all_variables())
-    cnt = 0
-    for epoch in range(num_epochs):
-        for data, target,  target_weight in train_set:
-            _, loss = sess.run([lstm.train_step, lstm.loss],
-                               feed_dict={lstm.inputs: data, lstm.targets: target, lstm.target_weights: target_weight})
-            cnt += 1
-            # validate the model
-            if cnt % 400 == 1:
-                loss = 0
-                for data2, target2,  target_weight2 in valid_set:
-                    loss += sess.run(lstm.loss,
-                                     feed_dict={lstm.inputs: data2, lstm.targets: target2, lstm.target_weights: target_weight2})
-                loss /= len(valid_set)
-                print '{n} samples processed, validation loss {l:.4f}'.format(n=cnt, l=loss)
+    with tf.Session() as sess:
+        sess.run(tf.initialize_all_variables())
+        # validate the model before training
+        loss = 0
+        for data2, target2,  target_weight2 in valid_set:
+            loss += sess.run(lstm.loss,
+                                feed_dict={lstm.inputs: data2, lstm.targets: target2, lstm.target_weights: target_weight2})
+        loss /= len(valid_set)
+        print 'on initialisation, validation loss {l:.4f}'.format(l=loss)
+        # training
+        for epoch in range(num_epochs):
+            for data, target,  target_weight in train_set:
+                _, loss = sess.run([lstm.train_step, lstm.loss],
+                                   feed_dict={lstm.inputs: data, lstm.targets: target, lstm.target_weights: target_weight})
+            loss = 0
+            for data2, target2,  target_weight2 in valid_set:
+                loss += sess.run(lstm.loss,
+                                    feed_dict={lstm.inputs: data2, lstm.targets: target2, lstm.target_weights: target_weight2})
+            loss /= len(valid_set)
+            print '{ep} epoch, validation loss {l:.4f}'.format(ep=epoch+1, l=loss)
+            # dump the learnt parameters at the end of each epoch
+            var_list = []
+            for var in lstm.var_names:
+                with tf.variable_scope(type(lstm).__name__, reuse=True):
+                    var_list.append(sess.run(tf.get_variable(var)))
+            cPickle.dump((var_list, loss), open("model/lstm_epoch{ep}.pkl".format(ep=epoch), "wb"))
