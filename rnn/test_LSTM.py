@@ -9,12 +9,13 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     dataset = cPickle.load(open('MNIST_data/mnist_seq.pkl', 'rb'))
+    dataset = dataset[::2]
     print '{n} samples in the original dataset'.format(n=len(dataset))
     dataset = [x for x, y in dataset]
-    input_size = vocab_size = 198 # including eos and padding
-    eos = 196
-    padding = 197
-    seq_size = 50
+    input_size = vocab_size = 102 # including eos and padding
+    eos = 100
+    padding = 101
+    seq_size = 15
     dataset_ = []
     for x in dataset:
         len_x = len(x)
@@ -30,7 +31,7 @@ if __name__ == '__main__':
     print '{n} samples in the dataset'.format(n=len(dataset))
 
     output_size = input_size = vocab_size
-    hidden_size = 100
+    hidden_size = 2 * input_size
     learning_rate = 1e-3
     num_epochs = 10
     num_steps = seq_size - 1
@@ -53,7 +54,8 @@ if __name__ == '__main__':
     valid_set = dataset[split_point :]
     print '{nt} training samples, {nv} validation samples'.format(nt=len(train_set), nv=len(valid_set))
 
-    var_list, _ = cPickle.load(open("model/lstm_epoch8.pkl", "rb"))
+    var_list, valid_loss = cPickle.load(open("model/lstm_epoch6.pkl", "rb"))
+    print valid_loss
     Wf, bf, Wi, bi, Wo, bo, Wc, bc, Wout, bout = var_list
     x = tf.placeholder(dtype=tf.float32, shape=input_size)
     h = tf.placeholder(shape=hidden_size, dtype=tf.float32)
@@ -74,7 +76,7 @@ if __name__ == '__main__':
     lin_output = tf.reshape(tf.matmul(Wout, tf.reshape(new_h, [-1, 1])), [-1]) + bout
     output = tf.reshape(tf.nn.softmax(tf.reshape(lin_output, [1, -1])), [-1])
 
-    first_input = valid_set[2][0][0]
+    first_input = valid_set[0][0][0]
     input_data = first_input
     print 'first input {i}'.format(i=np.argmax(input_data))
     output_list = [np.argmax(input_data)]

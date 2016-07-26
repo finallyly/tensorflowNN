@@ -12,9 +12,9 @@ if __name__ == '__main__':
     labels = mnist.train.labels
     dataset = []
     for i in range(0, images.shape[0]):
-        if labels[i] == 0:
+        if labels[i] == 1:
             im = images[i, :].reshape((28, 28))
-            im = (im[0::2, 0::2] > 0.1).astype(int)
+            im = (im[0::3, 0::3] > 0.1).astype(int)
             # image中非零元素的index
             nonzeros = im.reshape((-1)).nonzero()[0]
             dataset.append((nonzeros, labels[i]))

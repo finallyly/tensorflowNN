@@ -13,13 +13,13 @@ if __name__ == '__main__':
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=False)
     images = mnist.train.images
     labels = mnist.train.labels
-    m = labels == 0
+    m = labels == 1
     labels = labels[m]
     images = images[m]
     
-    idx = 4
+    idx = 6
     im = images[idx, :].reshape((28, 28))
-    im = (im[0::2, 0::2] > 0.1).astype(int)
+    im = (im[0::3, 0::3] > 0.1).astype(int)
     x = im.reshape((-1))
     non_zeros = x.nonzero()[0]
     
