@@ -6,7 +6,7 @@ import cPickle
 
 
 class RNN(object):
-    def __init__(self, input_size, hidden_size, output_size, num_steps, learning_rate):
+    def __init__(self, input_size, hidden_size, output_size, num_steps):
         with tf.variable_scope('rnn', reuse=False):
             U = tf.get_variable('U', shape=[hidden_size, input_size], dtype=tf.float32, initializer=tf.uniform_unit_scaling_initializer())
             W = tf.get_variable('W', shape=[hidden_size, hidden_size], dtype=tf.float32, initializer=tf.uniform_unit_scaling_initializer())
@@ -16,6 +16,7 @@ class RNN(object):
         data = tf.placeholder(dtype=tf.float32, shape=[num_steps, input_size], name='input')
         target = tf.placeholder(dtype=tf.float32, shape=[num_steps, input_size], name='target')
         target_weight = tf.placeholder(dtype=tf.float32, shape=[num_steps], name='target_weight')
+        learning_rate = tf.placeholder(dtype=tf.float32)
         s = tf.constant(0., dtype=tf.float32, shape=[hidden_size])
         loss = 0
         for t in range(0, num_steps):
@@ -33,13 +34,15 @@ class RNN(object):
             z = tf.reshape(z, [-1])
             loss += -tf.reduce_sum(tf.log(z) * y) * weight
         loss /= tf.reduce_sum(target_weight)
-        train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+        # train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+        train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
         self.data = data
         self.target = target
         self.target_weight = target_weight
         self.loss = loss
         self.train_step = train_step
         self.vars = [U, W, V, b, c]
+        self.learning_rate = learning_rate
 
 
 if __name__ == '__main__':
@@ -53,18 +56,25 @@ if __name__ == '__main__':
     seq_size = 11 # incl. eos
     num_steps = seq_size - 1
     hidden_size = input_size
-    learning_rate = 1e-3
+    learning_rate = 0.1
     
     num_epochs = 10
     
-    rnn = RNN(input_size, hidden_size, output_size, num_steps, learning_rate)
+    rnn = RNN(input_size, hidden_size, output_size, num_steps)
     sess = tf.Session()
     sess.run(tf.initialize_all_variables())
     for ep in range(0, num_epochs):
         i = 0
+        avg_loss = 0
         for data, target, target_weight in dataset:
             i += 1
-            _, loss = sess.run([rnn.train_step, rnn.loss], feed_dict={rnn.data: data, rnn.target: target, rnn.target_weight: target_weight})
-            if i % 1000 == 1:
-                print 'epoch {ep}, {i}-th sample, loss {l}'.format(ep=ep, i=i, l=loss)
+            _, loss = sess.run([rnn.train_step, rnn.loss],
+                               feed_dict={rnn.data: data, rnn.target: target, rnn.target_weight: target_weight, rnn.learning_rate: learning_rate})
+            avg_loss += loss
+            if i % 1000 == 0:
+                avg_loss /= 1000
+                print 'epoch {ep}, {i}-th sample, avg loss {l}, lr {lr}'\
+                    .format(ep=ep, i=i, l=avg_loss, lr=learning_rate)
+                avg_loss = 0
+        learning_rate /= 2
     sess.close()
