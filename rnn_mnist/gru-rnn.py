@@ -13,11 +13,11 @@ if __name__ == '__main__':
     n_input = 28
     n_step = 28
     n_class = 10
-    n_hidden = 2 * n_input
+    n_hidden = 4 * n_input
     batch_size = 100
-    learning_rate = 1e-3
-    n_iteration = 1e4
-    valid_steps = 500
+    learning_rate = 1e-2
+    n_iteration = 1e5
+    valid_steps = 1e3
 
     x = tf.placeholder(tf.float32, [None, n_step, n_input])
     y = tf.placeholder(tf.float32, [None, n_class])
